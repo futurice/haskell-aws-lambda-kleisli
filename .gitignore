@@ -1,0 +1,6 @@
+build/
+Kleisli.zip
+.ghc.environment.*
+dist-newstyle/
+cabal.project.local
+haskell/
