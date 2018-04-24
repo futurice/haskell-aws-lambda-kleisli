@@ -23,16 +23,12 @@ static PyObject* handler(PyObject *self, PyObject *args) {
 		return NULL;
 	}
 
-	// TODO: how to log!
-
 	// Run Haskell computation
 	char *res = kleisliHaskellHandler(event, context, logging);
 
 	// When memory buffers are passed as parameters to supply data to build objects, as for the s and s# formats, the required data is copied.
 	return Py_BuildValue("s", res);
 }
-
-// TODO: hs_exit?
 
 // http://downloads.haskell.org/~ghc/8.2.2/docs/html/users_guide/ffi-chap.html#making-a-haskell-library-that-can-be-called-from-foreign-code
 static PyObject *hs_init_wrapper(PyObject *self, PyObject *args) {
@@ -45,6 +41,11 @@ static PyObject *hs_init_wrapper(PyObject *self, PyObject *args) {
 	Py_RETURN_NONE;
 }
 
+static PyObject *hs_exit_wrapper(PyObject *self, PyObject *args) {
+	hs_exit();
+	Py_RETURN_NONE;
+}
+
 static PyMethodDef kleisli_methods[] = {
 	{
 		"handler", handler, METH_VARARGS,
@@ -53,6 +54,10 @@ static PyMethodDef kleisli_methods[] = {
 	{
 		"hs_init", hs_init_wrapper, METH_VARARGS,
 		"The call to hs_init() initializes GHC's runtime system. Do NOT try to invoke any Haskell functions before calling hs_init(): bad things will undoubtedly happen."
+	},
+	{
+		"hs_exit", hs_exit_wrapper, METH_VARARGS,
+		"Cleanup Haskell RTS"
 	},
 	{NULL, NULL, 0, NULL}
 };
