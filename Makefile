@@ -22,7 +22,7 @@ build-haskell : kleisli.cabal src/Kleisli.hs
 	ln -fs libkleisli-haskell.so.1.0.0 haskell/lib/libkleisli-haskell.so
 
 build-python : build-haskell kleisli_native.c setup.py
-	python setup.py build
+	python2.7 setup.py build
 
 Kleisli.zip : build-python Kleisli.py
 	# Remove old
@@ -30,7 +30,7 @@ Kleisli.zip : build-python Kleisli.py
 	# Add files
 	cd build/lib.linux-x86_64-2.7 && zip -9 ../../$@ *
 	cd haskell/lib && zip -9 ../../$@ *
-	ldd haskell/lib/libkleisli-haskell.so | python collect-shared-libs.py $@
+	ldd haskell/lib/libkleisli-haskell.so | python2.7 collect-shared-libs.py $@
 	zip -9 $@ Kleisli.py
 	# Test
 	zip -Tv $@
@@ -45,4 +45,4 @@ example :
 # We assume you have ghc-8.2.2 and cabal-install-head installed from hvr-ppa
 # https://launchpad.net/~hvr/+archive/ubuntu/ghc
 install-ubuntu-dev :
-	apt install python-dev
+	apt install python2.7-dev
