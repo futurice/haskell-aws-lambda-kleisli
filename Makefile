@@ -4,7 +4,7 @@ all : Kleisli.zip
 .PHONY : all build build-haskell build-python clean example install-ubuntu-dev
 
 clean :
-	rm -rf Kleisli.zip build
+	rm -rf Kleisli.zip build dist-newstyle
 
 build : build-python
 
