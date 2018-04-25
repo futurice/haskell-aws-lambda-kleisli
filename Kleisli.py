@@ -5,7 +5,7 @@ import json
 import kleisli_native
 
 # We init Haskell RTS once when the module is loaded.
-kleisli_native.hs_init()
+kleisli_native.hs_init(["aws-lambda", "+RTS", "-T"])
 
 # Not sure, if need to cleanup Haskell RTS.
 def cleanup():

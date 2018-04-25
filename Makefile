@@ -1,7 +1,8 @@
 all : Kleisli.zip
 	@echo "Now you can upload Kleisli.zip to AWS Lambda!"
 
-.PHONY : all build build-haskell build-python clean example install-ubuntu-dev
+.PHONY : all build build-haskell build-python clean example
+.PHONY : docker docker-setup install-ubuntu-dev
 
 clean :
 	rm -rf Kleisli.zip build dist-newstyle
@@ -45,4 +46,14 @@ example :
 # We assume you have ghc-8.2.2 and cabal-install-head installed from hvr-ppa
 # https://launchpad.net/~hvr/+archive/ubuntu/ghc
 install-ubuntu-dev :
-	apt install python2.7-dev
+	apt install python2.7-dev zip
+
+docker :
+	docker run --entrypoint=bash --rm -ti -v $$(pwd):/app -w /app phadej/ghc:8.2.2-ubuntu
+
+docker-setup :
+	apt-get update
+	apt-get install cabal-install-head
+	/opt/cabal/head/bin/cabal update
+	make install-ubuntu-dev
+	@echo 'export PATH=/opt/cabal/head/bin:$$PATH'
