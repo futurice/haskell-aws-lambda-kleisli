@@ -1,11 +1,12 @@
 #include <Python.h>
 #include <stdio.h>
 #include "HsFFI.h"
+#include "Rts.h"
 #include "haskell/include/kleisli_haskell.h"
 
 // An exported handler. it does minimal job calling into Haskell.
 //
-// (event : string, context : LambdaContext) :	string
+// (event : string, context : LambdaContext) :string
 static PyObject* handler(PyObject *self, PyObject *args) {
 	const char* event;
 	PyObject* context;
@@ -31,14 +32,52 @@ static PyObject* handler(PyObject *self, PyObject *args) {
 }
 
 // http://downloads.haskell.org/~ghc/8.2.2/docs/html/users_guide/ffi-chap.html#making-a-haskell-library-that-can-be-called-from-foreign-code
+//
+// (args? : [string]) : None
 static PyObject *hs_init_wrapper(PyObject *self, PyObject *args) {
-	int argc = 0;
-	char *argv[] = { NULL };
-	char **pargv = argv;
-	hs_init(&argc, &pargv);
+	// https://stackoverflow.com/a/42868330/1308058
+	PyObject *pList = NULL;
 
-	// do any other initialization here and
-	Py_RETURN_NONE;
+	// parse arguments, optional list.
+	if (!PyArg_ParseTuple(args, "|O!:hs_init", &PyList_Type, &pList)) {
+		return NULL;
+	}
+
+	// no arguments: hs_init without arguments
+	if (pList == NULL) {
+		int argc = 0;
+		char *argv[] = { NULL };
+		char **pargv = argv;
+		hs_init(&argc, &pargv);
+
+		// do any other initialization here and
+		Py_RETURN_NONE;
+	} else {
+		// with arguments, extract strings (char *) from Python list.
+		Py_ssize_t n = PyList_Size(pList);
+
+		int argc = n;
+		char **argv = malloc(sizeof(char *) * (argc + 1));
+		argv[argc] = NULL;
+
+		for (int i = 0; i < argc; i++) {
+			PyObject *pItem = PyList_GetItem(pList, i);
+			if (!PyString_Check(pItem)) {
+				free(argv);
+				PyErr_SetString(PyExc_TypeError, "list items must be strings.");
+				return NULL;
+			}
+
+			argv[i] = PyString_AsString(pItem);
+		}
+
+		RtsConfig conf = defaultRtsConfig;
+		conf.rts_opts_enabled = RtsOptsAll;
+		hs_init_ghc(&argc, &argv, conf);
+		free(argv);
+
+		Py_RETURN_NONE;
+	}
 }
 
 static PyObject *hs_exit_wrapper(PyObject *self, PyObject *args) {

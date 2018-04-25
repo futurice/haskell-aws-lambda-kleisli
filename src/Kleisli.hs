@@ -9,6 +9,8 @@ import qualified Data.Text            as T
 import qualified Data.Text.Encoding   as TE
 import           Foreign.C            (CString, withCString)
 import           Foreign.Ptr          (Ptr)
+import           GHC.Stats            (getRTSStats)
+import           System.Environment   (getArgs)
 
 -- export handler
 foreign export ccall kleisliHaskellHandler :: CString -> Ptr LambdaContext -> Ptr LoggingFunc -> IO CString
@@ -56,5 +58,7 @@ handlerBS logString input = case eitherDecodeStrict input of
 handler :: (String -> IO ()) -> Value -> IO Value
 handler logString x = do
     logString "Logging from Haskell"
+    logString . show =<< getArgs
+    logString . show =<< getRTSStats
     return $ x
         & deep _String %~ T.toUpper

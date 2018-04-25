@@ -5,7 +5,7 @@ import json
 import kleisli_native
 
 # Init Haskell RTS
-kleisli_native.hs_init()
+kleisli_native.hs_init(["ignored-command-name", "opt1", "opt2", "+RTS", "-A32m", "-T"])
 
 # Register Haskell RTS exit
 def cleanup():
