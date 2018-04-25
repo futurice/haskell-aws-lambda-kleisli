@@ -5,22 +5,19 @@ all : Kleisli.zip
 .PHONY : docker docker-setup install-ubuntu-dev
 
 clean :
-	rm -rf Kleisli.zip build dist-newstyle
+	rm -rf Kleisli.zip build dist-newstyle haskell
 
 build : build-python
 
 build-haskell : kleisli.cabal src/Kleisli.hs
 	# Build Haskell
-	cabal new-build -w ghc-8.2.2
+	cabal new-build .
 	# Make directories
 	mkdir -p haskell/include
 	mkdir -p haskell/lib
 	# Copy header and .so library
 	cp $$(find dist-newstyle/build -type f -name Kleisli_stub.h) haskell/include/kleisli_haskell.h
-	cp $$(find dist-newstyle/build -type f -name libkleisli-haskell.so.1.0.0) haskell/lib
-	# Make .so links
-	ln -fs libkleisli-haskell.so.1.0.0 haskell/lib/libkleisli-haskell.so.1
-	ln -fs libkleisli-haskell.so.1.0.0 haskell/lib/libkleisli-haskell.so
+	cp $$(find dist-newstyle/build -type f -name libkleisli-haskell.so) haskell/lib
 
 build-python : build-haskell kleisli_native.c setup.py
 	python2.7 setup.py build
