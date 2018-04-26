@@ -62,7 +62,7 @@ for line in sys.stdin:
         # This is usedul to debugging the script,
         # (almost) all lines should match
 
-        if "/lib64/ld-linux-x86-64.so.2" in line:
+        if "/lib64/ld-linux-x86-64.so.2" in line or "linux-vdso.so" in line:
             pass
         else:
             raise Exception(line)
