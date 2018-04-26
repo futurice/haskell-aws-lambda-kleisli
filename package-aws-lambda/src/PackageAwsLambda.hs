@@ -17,12 +17,19 @@
 -- > BSL.writeFile "Kleisli.zip" bsl
 --
 module PackageAwsLambda (
+    -- * Package function
     packageAwsLambda,
+    -- * Configuration
     Conf (..),
     mkConf,
     mkConf',
+    confForeignLib,
+    confPythonModule,
+    confHandlers,
+    confAdditionalLibs,
+    confRtsFlags,
+    -- * Helpers
     findForeignLib,
-    -- * Internal
     compilePython,
     ) where
 
@@ -66,20 +73,37 @@ import           Orphans                    ()
 -------------------------------------------------------------------------------
 
 data Conf = Conf
-    { confForeignLib     :: !FilePath
-      -- ^ Either a component name or a filepath
-    , confPythonModule   :: !Text
-      -- ^ Name for resulting python module
-    , confHandlers       :: !(NonEmpty (Text, Text))
-      -- ^ Handlers as pair of names, Haskell and python name
-    , confAdditionalLibs :: ![String]
-      -- ^ Additional c-libs to (be considered to) bundle
-    , confRtsFlags       :: ![Text]
-      -- ^ RTS flags passed to lambda. Setting @-M2G is probably a good idea.
-      --
-      -- See <https://downloads.haskell.org/~ghc/8.2.2/docs/html/users_guide/runtime_control.html>
+    { _confForeignLib     :: !FilePath
+    , _confPythonModule   :: !Text
+    , _confHandlers       :: !(NonEmpty (Text, Text))
+    , _confAdditionalLibs :: ![Text]
+    , _confRtsFlags       :: ![Text]
     }
   deriving Show
+
+type LensLike' f s a = (a -> f a) -> s -> f s
+
+-- | A path to foreign-library binary. See also 'findForaignLib'.
+confForeignLib :: Functor f => LensLike' f Conf FilePath
+confForeignLib f s = (\x -> s { _confForeignLib = x }) <$> f (_confForeignLib s)
+
+-- | Name for resulting python module
+confPythonModule :: Functor f => LensLike' f Conf Text
+confPythonModule f s = (\x -> s { _confPythonModule = x }) <$> f (_confPythonModule s)
+
+-- | Handlers as pair of names, Haskell and python name
+confHandlers :: Functor f => LensLike' f Conf (NonEmpty (Text, Text))
+confHandlers f s = (\x -> s { _confHandlers = x }) <$> f (_confHandlers s)
+-- | Additional c-libs to (be considered to) bundle
+
+confAdditionalLibs :: Functor f => LensLike' f Conf [Text]
+confAdditionalLibs f s = (\x -> s { _confAdditionalLibs = x }) <$> f (_confAdditionalLibs s)
+
+-- | RTS flags passed to lambda. Setting @-M2G is probably a good idea.
+--
+-- See <https://downloads.haskell.org/~ghc/8.2.2/docs/html/users_guide/runtime_control.html>
+confRtsFlags :: Functor f => LensLike' f Conf [Text]
+confRtsFlags f s = (\x -> s { _confRtsFlags = x }) <$> f (_confRtsFlags s)
 
 -- | Make 'Conf' from foreign-lib location, Python module name and handlers.
 mkConf :: FilePath -> Text -> NonEmpty (Text, Text) -> Conf
@@ -143,13 +167,13 @@ renderSetup = Mu.renderMustache templateSetup . toValue
 toValue :: Conf -> Value
 toValue conf = object
     [ "foreignLib"       .= either (const "???") id
-        (libraryName (confForeignLib conf))
-    , "nativeModuleName" .= (confPythonModule conf <> "_native")
+        (libraryName (_confForeignLib conf))
+    , "nativeModuleName" .= (_confPythonModule conf <> "_native")
     , "handlers" .=
         [ object [ "hs" .= hs, "py" .= py ]
-        | (hs, py) <- toList (confHandlers conf)
+        | (hs, py) <- toList (_confHandlers conf)
         ]
-    , "rtsFlags" .= intercalate ", " (map show (confRtsFlags conf))
+    , "rtsFlags" .= intercalate ", " (map show (_confRtsFlags conf))
     ]
 
 -------------------------------------------------------------------------------
@@ -186,10 +210,10 @@ compilePython tmpDir conf = do
     TL.writeFile (tmpDir </> "setup.py") setupContents
     TL.writeFile (tmpDir </> cFileName) cContents
     _ <- readCreateProcess p ""
-    return $ tmpDir </> "build" </> "lib.linux-x86_64-2.7" </> T.unpack (confPythonModule conf <> "_native.so")
+    return $ tmpDir </> "build" </> "lib.linux-x86_64-2.7" </> T.unpack (_confPythonModule conf <> "_native.so")
   where
-    flibFileName  = confForeignLib conf
-    cFileName     = T.unpack $ confPythonModule conf <> "_native.c"
+    flibFileName  = _confForeignLib conf
+    cFileName     = T.unpack $ _confPythonModule conf <> "_native.c"
     cContents     = renderC conf
     setupContents = renderSetup conf
 
@@ -202,7 +226,7 @@ compilePython tmpDir conf = do
 -------------------------------------------------------------------------------
 
 findExtraLibs
-    :: [String]        -- ^ additional libs
+    :: [Text]        -- ^ additional libs
     -> FilePath
     -> IO [FilePath]
 findExtraLibs additionalCopyLibs fp = do
@@ -216,7 +240,7 @@ findExtraLibs additionalCopyLibs fp = do
 
     lib = do
         l :| _ <- Tri.sepByNonEmpty
-            (some $ Tri.satisfy $ \c -> isAlphaNum c || c == '-')
+            (some $ Tri.satisfy $ \c -> isAlphaNum c || c == '-' || c == '+' || c == '_')
             (Tri.char '.')
 
         Tri.spaces
@@ -224,7 +248,7 @@ findExtraLibs additionalCopyLibs fp = do
             _ <- Tri.string "=>"
             Tri.spaces
             many $ Tri.satisfy $ \c ->
-                isAlphaNum c || c == '.' || c == '-' || c == '_' || c == '/'
+                isAlphaNum c || c == '.' || c == '-' || c == '+' || c == '_' || c == '/'
         _ <- address
 
         if | "libHS" `isPrefixOf` l -> return md
@@ -236,20 +260,57 @@ findExtraLibs additionalCopyLibs fp = do
 
     -- Libraries which exist in Linux AMI
     skipLibs =
-        [ "librt"
-        , "libutil"
-        , "libdl"
-        , "libpthread"
-        , "libm"
-        , "libc"
+        [ "libc"
         , "linux-vdso"
+        , "libBrokenLocale"
+        , "libacl"
+        , "libanl"
+        , "libattr"
+        , "libbz2"
+        , "libc"
+        , "libcap"
+        , "libcidn"
+        , "libcrypt"
+        , "libcrypto"
+        , "libdl"
+        , "libexpat"
+        , "libgcc_s"
+        , "libgcc_s-7-20170915"
+        , "libgpg-error"
+        , "liblber-2.4"
+        , "libldap-2.4"
+        , "libldap_r-2.4"
+        , "libldif-2.4"
+        , "libm"
+        , "libncurses"
+        , "libncursesw"
+        , "libnsl"
+        , "libnss_compat"
+        , "libnss_db"
+        , "libnss_dns"
+        , "libnss_files"
+        , "libnss_hesiod"
+        , "libnss_nis"
+        , "libnss_nisplus"
+        , "libpcre"
+        , "libpopt"
+        , "libpthread"
+        , "libr"
+        , "libreadline"
+        , "librt"
+        , "libsepol"
+        , "libssl"
+        , "libthread_db"
+        , "libtinfo"
+        , "libutil"
+        , "libz"
         ]
 
     -- Libraries which we know for sure aren't in Amazon Linux AMI
     copyLibs =
         [ "libgmp"
         , "libffi"
-        ] ++ additionalCopyLibs
+        ] ++ map T.unpack additionalCopyLibs
 
     address = Tri.spaces
         *> Tri.char '('
@@ -278,7 +339,7 @@ packageAwsLambda conf =
         let hsSoEntry = Zip.toEntry (takeFileName hsFileName) 0 hsSoContents
 
         -- .so dependencies
-        libs <- findExtraLibs (confAdditionalLibs conf) hsFileName
+        libs <- findExtraLibs (_confAdditionalLibs conf) hsFileName
         libEntries <- for libs $ \lib -> do
             libContents <- BSL.readFile lib
             return $ Zip.toEntry (takeFileName lib) 0 libContents
@@ -292,8 +353,8 @@ packageAwsLambda conf =
             , Zip.zComment   = mempty
             }
   where
-    hsFileName = confForeignLib conf
+    hsFileName = _confForeignLib conf
 
-    pyFileName = T.unpack $ confPythonModule conf <> ".py"
+    pyFileName = T.unpack $ _confPythonModule conf <> ".py"
     pyContents = renderPy conf
     pyEntry    = Zip.toEntry pyFileName 0 $ TLE.encodeUtf8 pyContents
