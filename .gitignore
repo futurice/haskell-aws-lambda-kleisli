@@ -4,3 +4,8 @@ build/
 dist-newstyle/
 cabal.project.local
 haskell/
+
+# VIM
+*.swp
+*.swo
+*.swn

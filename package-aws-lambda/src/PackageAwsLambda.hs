@@ -28,6 +28,7 @@ module PackageAwsLambda (
     confHandlers,
     confAdditionalLibs,
     confRtsFlags,
+    confReadSo,
     -- * Helpers
     findForeignLib,
     compilePython,
@@ -78,8 +79,8 @@ data Conf = Conf
     , _confHandlers       :: !(NonEmpty (Text, Text))
     , _confAdditionalLibs :: ![Text]
     , _confRtsFlags       :: ![Text]
+    , _confReadSo         :: !(FilePath -> IO BSL.ByteString)
     }
-  deriving Show
 
 type LensLike' f s a = (a -> f a) -> s -> f s
 
@@ -105,13 +106,20 @@ confAdditionalLibs f s = (\x -> s { _confAdditionalLibs = x }) <$> f (_confAddit
 confRtsFlags :: Functor f => LensLike' f Conf [Text]
 confRtsFlags f s = (\x -> s { _confRtsFlags = x }) <$> f (_confRtsFlags s)
 
+-- | Read @.so@. A hook to do tricks, like @strip@.
+--
+-- Default: 'BSL.readFile'
+--
+confReadSo :: Functor f => LensLike' f Conf (FilePath -> IO BSL.ByteString)
+confReadSo f s = (\x -> s { _confReadSo = x }) <$> f (_confReadSo s)
+
 -- | Make 'Conf' from foreign-lib location, Python module name and handlers.
 mkConf :: FilePath -> Text -> NonEmpty (Text, Text) -> Conf
-mkConf fl pm hs = Conf fl pm hs [] []
+mkConf fl pm hs = Conf fl pm hs [] [] BSL.readFile
 
 -- | Make 'Conf' from foreign-lib location, Python module name and single handler
 mkConf' :: FilePath -> Text -> Text -> Text -> Conf
-mkConf' fl pm hs py = Conf fl pm ((hs, py) :| []) [] []
+mkConf' fl pm hs py = Conf fl pm ((hs, py) :| []) [] [] BSL.readFile
 
 -------------------------------------------------------------------------------
 -- Find foreign lib
@@ -260,30 +268,44 @@ findExtraLibs additionalCopyLibs fp = do
 
     -- Libraries which exist in Linux AMI
     skipLibs =
-        [ "libc"
-        , "linux-vdso"
+        [ "linux-vdso"
+
         , "libBrokenLocale"
         , "libacl"
         , "libanl"
+        , "libasound"
         , "libattr"
+        , "libaudit"
+        , "libauparse"
+        , "libblkid"
         , "libbz2"
         , "libc"
+        , "libcap-ng"
         , "libcap"
         , "libcidn"
         , "libcrypt"
-        , "libcrypto"
+        -- , "libcrypto"
+        , "libdbus-1"
         , "libdl"
         , "libexpat"
+        , "libgcc_s-4.8.3-20140911"
         , "libgcc_s"
-        , "libgcc_s-7-20170915"
         , "libgpg-error"
+        , "libidn"
+        , "libip4tc"
+        , "libip6tc"
+        , "libiptc"
+        , "libkeyutils"
         , "liblber-2.4"
         , "libldap-2.4"
         , "libldap_r-2.4"
         , "libldif-2.4"
         , "libm"
+        , "libmount"
         , "libncurses"
         , "libncursesw"
+        , "libnih-dbus"
+        , "libnih"
         , "libnsl"
         , "libnss_compat"
         , "libnss_db"
@@ -292,18 +314,25 @@ findExtraLibs additionalCopyLibs fp = do
         , "libnss_hesiod"
         , "libnss_nis"
         , "libnss_nisplus"
+        , "libpam"
+        , "libpam_misc"
+        , "libpamc"
         , "libpcre"
         , "libpopt"
         , "libpthread"
-        , "libr"
+        , "libpwquality"
         , "libreadline"
+        , "libresolv"
         , "librt"
         , "libsepol"
-        , "libssl"
         , "libthread_db"
         , "libtinfo"
+        , "libudev"
         , "libutil"
+        , "libuuid"
+        , "libxtables"
         , "libz"
+
         ]
 
     -- Libraries which we know for sure aren't in Amazon Linux AMI
@@ -331,17 +360,17 @@ packageAwsLambda conf =
     withTempDirectory "/tmp" "aws-lambda-py" $ \tmpDir -> do
         -- python native extension
         pySo <- compilePython tmpDir conf
-        pySoContents <- BSL.readFile pySo
+        pySoContents <- _confReadSo conf pySo
         let pySoEntry = Zip.toEntry (takeFileName pySo) 0 pySoContents
 
         -- haskell
-        hsSoContents <- BSL.readFile hsFileName
+        hsSoContents <- _confReadSo conf hsFileName
         let hsSoEntry = Zip.toEntry (takeFileName hsFileName) 0 hsSoContents
 
         -- .so dependencies
         libs <- findExtraLibs (_confAdditionalLibs conf) hsFileName
         libEntries <- for libs $ \lib -> do
-            libContents <- BSL.readFile lib
+            libContents <- _confReadSo conf lib
             return $ Zip.toEntry (takeFileName lib) 0 libContents
 
         -- all together
