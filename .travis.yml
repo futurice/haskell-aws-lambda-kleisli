@@ -32,9 +32,12 @@ before_cache:
 
 matrix:
   include:
+    - compiler: "ghc-8.4.2"
+    # env: TEST=--disable-tests BENCH=--disable-benchmarks
+      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-2.2,ghc-8.4.2], sources: [hvr-ghc]}}
     - compiler: "ghc-8.2.2"
     # env: TEST=--disable-tests BENCH=--disable-benchmarks
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-head,ghc-8.2.2], sources: [hvr-ghc]}}
+      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-2.2,ghc-8.2.2], sources: [hvr-ghc]}}
 
 before_install:
   - HC=${CC}
@@ -93,8 +96,8 @@ script:
   - cabal new-build -w ${HC} ${TEST} ${BENCH} all
 
   # cabal check
-  - (cd kleisli-[0-9]* && cabal check)
-  - (cd package-aws-lambda-[0-9]* && cabal check)
+  - (cd kleisli-* && cabal check)
+  - (cd package-aws-lambda-* && cabal check)
 
   # haddock
   - rm -rf ./dist-newstyle
