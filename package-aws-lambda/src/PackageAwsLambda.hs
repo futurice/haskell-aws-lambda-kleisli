@@ -131,7 +131,8 @@ findForeignLib
     -> Text            -- ^ Component name
     -> IO (Maybe FilePath)
 findForeignLib bd cn = do
-    (plan, _) <- CP.findAndDecodePlanJson bd
+    plan <- CP.findAndDecodePlanJson $
+        maybe (CP.ProjectRelativeToDir ".") CP.InBuildDir bd
 
     let mdir = listToMaybe
             [ d
