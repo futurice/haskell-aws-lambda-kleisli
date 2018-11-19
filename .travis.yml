@@ -2,7 +2,7 @@
 #
 #   runghc make_travis_yml_2.hs '--output' '.travis.yml' '--branch' 'master' 'cabal.project'
 #
-# For more information, see https://github.com/hvr/multi-ghc-travis
+# For more information, see https://github.com/haskell-CI/haskell-ci
 #
 language: c
 sudo: false
@@ -32,12 +32,15 @@ before_cache:
 
 matrix:
   include:
-    - compiler: "ghc-8.4.3"
+    - compiler: "ghc-8.6.2"
     # env: TEST=--disable-tests BENCH=--disable-benchmarks
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-2.2,ghc-8.4.3], sources: [hvr-ghc]}}
+      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-2.4,ghc-8.6.2], sources: [hvr-ghc]}}
+    - compiler: "ghc-8.4.4"
+    # env: TEST=--disable-tests BENCH=--disable-benchmarks
+      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-2.4,ghc-8.4.4], sources: [hvr-ghc]}}
     - compiler: "ghc-8.2.2"
     # env: TEST=--disable-tests BENCH=--disable-benchmarks
-      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-2.2,ghc-8.2.2], sources: [hvr-ghc]}}
+      addons: {apt: {packages: [ghc-ppa-tools,cabal-install-2.4,ghc-8.2.2], sources: [hvr-ghc]}}
 
 before_install:
   - HC=${CC}
@@ -64,7 +67,7 @@ install:
   - grep -Ev -- '^\s*--' ${HOME}/.cabal/config | grep -Ev '^\s*$'
   - "printf 'packages: \".\" \"package-aws-lambda\"\\n' > cabal.project"
   - touch cabal.project.local
-  - "if ! $NOINSTALLEDCONSTRAINTS; then for pkg in $($HCPKG list --simple-output); do echo $pkg | sed 's/^/constraints: /' | sed 's/-[^-]*$/ installed/' >> cabal.project.local; done; fi"
+  - "if ! $NOINSTALLEDCONSTRAINTS; then for pkg in $($HCPKG list --simple-output); do echo $pkg  | grep -vw -- kleisli | grep -vw -- package-aws-lambda | sed 's/^/constraints: /' | sed 's/-[^-]*$/ installed/' >> cabal.project.local; done; fi"
   - cat cabal.project || true
   - cat cabal.project.local || true
   - if [ -f "./configure.ac" ]; then
@@ -83,14 +86,13 @@ install:
 # any command which exits with a non-zero exit code causes the build to fail.
 script:
   # test that source-distributions can be generated
-  - (cd "." && cabal sdist)
-  - (cd "package-aws-lambda" && cabal sdist)
-  - mv "."/dist/kleisli-*.tar.gz "package-aws-lambda"/dist/package-aws-lambda-*.tar.gz ${DISTDIR}/
+  - cabal new-sdist all
+  - mv dist-newstyle/sdist/*.tar.gz ${DISTDIR}/
   - cd ${DISTDIR} || false
   - find . -maxdepth 1 -name '*.tar.gz' -exec tar -xvf '{}' \;
   - "printf 'packages: kleisli-*/*.cabal package-aws-lambda-*/*.cabal\\n' > cabal.project"
   - touch cabal.project.local
-  - "if ! $NOINSTALLEDCONSTRAINTS; then for pkg in $($HCPKG list --simple-output); do echo $pkg | sed 's/^/constraints: /' | sed 's/-[^-]*$/ installed/' >> cabal.project.local; done; fi"
+  - "if ! $NOINSTALLEDCONSTRAINTS; then for pkg in $($HCPKG list --simple-output); do echo $pkg  | grep -vw -- kleisli | grep -vw -- package-aws-lambda | sed 's/^/constraints: /' | sed 's/-[^-]*$/ installed/' >> cabal.project.local; done; fi"
   - cat cabal.project || true
   - cat cabal.project.local || true
   # this builds all libraries and executables (without tests/benchmarks)
@@ -104,7 +106,6 @@ script:
   - (cd package-aws-lambda-* && cabal check)
 
   # haddock
-  - rm -rf ./dist-newstyle
   - if $HADDOCK; then cabal new-haddock -w ${HC} ${TEST} ${BENCH} all; else echo "Skipping haddock generation";fi
 
   # Build without installed constraints for packages in global-db
